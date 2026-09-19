@@ -64,6 +64,40 @@ test("</script> inside a string does not end the script block", async () => {
   assert.equal(C().textContent, "a </script> b x </script> 2");
 });
 
+test("imports are hoisted, but text that looks like an import stays in its string or comment", () => {
+  const code = js(`<script>
+  import A from "./A.js";
+  import { b } from "./b.js";
+  import "./side.js";
+  const sample = \`import { mount } from "./mau/index.js";
+mount(el, App);\`;
+  const one = "import x from 'y'";
+  // import z from "z";
+  /* import w from "w"; */
+</script>
+<p>{sample}</p>`);
+  const head = code.split("export default")[0];
+  assert.match(head, /import A from "\.\/A\.js";/);
+  assert.match(head, /import \{ b \} from "\.\/b\.js";/);
+  assert.match(head, /import "\.\/side\.js";/);
+  assert.doesNotMatch(head, /"\.\/mau\/index\.js"/);
+  assert.doesNotMatch(head, /import x from/);
+  const body = code.split("export default")[1];
+  assert.match(body, /const sample = `import \{ mount \} from "\.\/mau\/index\.js";\nmount\(el, App\);`;/);
+  assert.match(body, /\/\/ import z from "z";/);
+});
+
+test("the script is copied as written: multi-line strings keep their exact indentation", async () => {
+  const C = await build(`<script>
+  const code = \`<script>
+  const n = signal(0);
+</script>
+    deeper\`;
+</script>
+<pre>{code}</pre>`);
+  assert.equal(C().textContent, "<script>\n  const n = signal(0);\n</script>\n    deeper");
+});
+
 test("literal braces with \\{ and \\}, in text and in attributes", async () => {
   const C = await build('<p title="a \\{b\\}">\\{ text \\}</p>');
   const p = C();

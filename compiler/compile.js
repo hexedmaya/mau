@@ -25,7 +25,6 @@ export class MauError extends Error {
 const VOID = new Set(["area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source", "track", "wbr"]);
 const NAME = /[A-Za-z][\w:.-]*/y;
 const ATTR = /[^\s=\/>{}"']+/y;
-const IMPORT_RE = /^[ \t]*import\s+[\s\S]*?\bfrom\s*["'][^"'\n]+["'];?|^[ \t]*import\s*["'][^"'\n]+["'];?/gm;
 const q = JSON.stringify;
 
 // Index of the `}` that closes a `{` whose content starts at `start`. Skips strings and template literals.
@@ -59,26 +58,70 @@ function scanExpr(src, start, fail) {
   return fail("missing closing }", start - 1);
 }
 
+// If a string, template literal or comment starts at `p`, the index of its last character. Otherwise -1.
+function skipLiteral(src, p) {
+  const c = src[p];
+  if (c === '"' || c === "'") {
+    for (p++; p < src.length && src[p] !== c && src[p] !== "\n"; p++) if (src[p] === "\\") p++;
+    return p;
+  }
+  if (c === "`") {
+    for (p++; p < src.length && src[p] !== "`"; p++) {
+      if (src[p] === "\\") p++;
+      else if (src[p] === "$" && src[p + 1] === "{") p = scanExpr(src, p + 2, () => src.length);
+    }
+    return p;
+  }
+  if (c === "/" && src[p + 1] === "/") {
+    while (p < src.length && src[p] !== "\n") p++;
+    return p;
+  }
+  if (c === "/" && src[p + 1] === "*") {
+    const e = src.indexOf("*/", p + 2);
+    return e < 0 ? src.length : e + 1;
+  }
+  return -1;
+}
+
 // Index of the `</script` that really ends a script block: skips strings, template literals and comments.
 function findScriptEnd(src, from) {
   for (let p = from; p < src.length; p++) {
-    const c = src[p];
-    if (c === "<" && src.startsWith("</script", p)) return p;
-    if (c === '"' || c === "'") {
-      for (p++; p < src.length && src[p] !== c && src[p] !== "\n"; p++) if (src[p] === "\\") p++;
-    } else if (c === "`") {
-      for (p++; p < src.length && src[p] !== "`"; p++) {
-        if (src[p] === "\\") p++;
-        else if (src[p] === "$" && src[p + 1] === "{") p = scanExpr(src, p + 2, () => src.length);
-      }
-    } else if (c === "/" && src[p + 1] === "/") {
-      while (p < src.length && src[p] !== "\n") p++;
-    } else if (c === "/" && src[p + 1] === "*") {
-      const e = src.indexOf("*/", p + 2);
-      p = e < 0 ? src.length : e + 1;
-    }
+    if (src[p] === "<" && src.startsWith("</script", p)) return p;
+    const end = skipLiteral(src, p);
+    if (end >= 0) p = end;
   }
   return -1;
+}
+
+// Import statements at the start of a line are hoisted out of the script. Text that only looks like an
+// import (inside a string, a template literal or a comment) stays where it is.
+// The part between `import` and `from` may only hold names, braces, commas and `*`, so a match can never
+// run on into a later statement.
+const IMPORT_AT = /import\s+[\w$*{},\s]+?\s*\bfrom\s*["'][^"'\n]+["'];?|import\s*["'][^"'\n]+["'];?/y;
+
+function splitImports(body) {
+  const imports = [];
+  let out = "", last = 0;
+  const atLineStart = (i) => {
+    let k = i - 1;
+    while (k >= 0 && (body[k] === " " || body[k] === "\t")) k--;
+    return k < 0 || body[k] === "\n";
+  };
+  for (let p = 0; p < body.length; p++) {
+    const end = skipLiteral(body, p);
+    if (end >= 0) { p = end; continue; }
+    if (body[p] === "i" && body.startsWith("import", p) && atLineStart(p)) {
+      IMPORT_AT.lastIndex = p;
+      const m = IMPORT_AT.exec(body);
+      if (m) {
+        imports.push(m[0].trim());
+        out += body.slice(last, p);
+        p += m[0].length - 1;
+        last = p + 1;
+      }
+    }
+  }
+  return { imports, body: out + body.slice(last) };
 }
 
 function hash(s) {
@@ -365,8 +408,9 @@ export function compile(source, { file = "component.mau", runtime = "mau" } = {}
   const base = file.split(/[\\/]/).pop().replace(/\.mau$/, "").replace(/[^\w$]/g, "_");
   const name = /^[A-Za-z_$]/.test(base) ? base[0].toUpperCase() + base.slice(1) : "_" + base;
 
-  const imports = [];
-  const body = (parts.script ?? "").replace(IMPORT_RE, (m) => { imports.push(m.trim()); return ""; }).trim();
+  const split = splitImports(parts.script ?? "");
+  const imports = split.imports;
+  const body = split.body.trim();
 
   const scopeClass = parts.style !== null ? "mau-" + hash(source) : null;
   const css = scopeClass ? `@scope (.${scopeClass}) {\n${parts.style.trim()}\n}` : null;
@@ -380,10 +424,8 @@ export function compile(source, { file = "component.mau", runtime = "mau" } = {}
   ];
   if (css) lines.push(`__style(${q(css)});`, "");
   lines.push(`export default function ${name}(props = {}) {`);
-  if (body) {
-    const indent = Math.min(...body.split("\n").slice(1).filter((l) => l.trim()).map((l) => l.match(/^ */)[0].length), 99);
-    lines.push(body.split("\n").map((l, k) => "  " + (k ? l.slice(Math.min(indent, l.match(/^ */)[0].length)) : l)).join("\n"));
-  }
+  // The script is copied as written. Re-indenting it would change the content of multi-line strings.
+  if (body) lines.push("  " + body);
   lines.push(`  const __root = ${gen(roots[0])};`);
   if (scopeClass) lines.push(`  __root.classList.add(${q(scopeClass)});`);
   lines.push("  return __root;", "}", "");
