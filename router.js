@@ -8,14 +8,41 @@
  * ║                                                           ║
  * ╚═══════════════════════════════════════════════════════════╝
  */
-// Hash router: works from any static server, no server config. Routes: { "/": Home, "/inst/:id": Inst, "*": NotFound }
+// History router: real paths (/docs/router), no #. The server has to answer every unknown path with index.html.
+// Routes: { "/": Home, "/inst/:id": Inst, "*": NotFound }
 import { signal, untracked } from "./reactive.js";
 
-const read = () => location.hash.slice(1) || "/";
-const current = signal(read());
-addEventListener("hashchange", () => current.set(read()));
+let base = ""; // "/app" when the site does not live at the root of the domain
+const clean = (p) => (p.length > 1 ? p.replace(/\/+$/, "") : p); // "/docs/" is "/docs"
 
-export const navigate = (to) => { location.hash = to; };
+const read = () => {
+  let p = location.pathname;
+  if (base && (p === base || p.startsWith(base + "/"))) p = p.slice(base.length) || "/";
+  return clean(p || "/") + location.search;
+};
+
+const current = signal(read());
+addEventListener("popstate", () => current.set(read()));
+
+// Go to a path. `replace` swaps the current history entry instead of adding one.
+export function navigate(to, { replace = false } = {}) {
+  history[replace ? "replaceState" : "pushState"](null, "", base + to);
+  current.set(read());
+}
+
+// Plain links do the work: a click on a normal <a href="/docs"> to the same site is a navigation without
+// a page load. Modified clicks, target="_blank", downloads, other sites and #anchors on the same page are left alone.
+if (typeof document !== "undefined") {
+  document.addEventListener("click", (e) => {
+    if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    const a = e.target?.closest?.("a[href]");
+    if (!a || (a.target && a.target !== "_self") || a.hasAttribute("download") || a.origin !== location.origin) return;
+    if (a.pathname === location.pathname && a.search === location.search && a.hash) return;
+    if (base && !(a.pathname === base || a.pathname.startsWith(base + "/"))) return;
+    e.preventDefault();
+    navigate((a.pathname.slice(base.length) || "/") + a.search);
+  });
+}
 
 // Reactive: { path, query }
 export const route = () => {
@@ -39,7 +66,12 @@ function match(pattern, path) {
 }
 
 // Returns a function to use as a reactive child: {view()}. Pages get props { params, query }.
-export function router(routes) {
+// Options: { base: "/app" } if the site lives below a path.
+export function router(routes, { base: b } = {}) {
+  if (b != null) {
+    base = clean(b === "/" ? "" : b);
+    current.set(read());
+  }
   const entries = Object.entries(routes);
   return () => {
     const { path, query } = route();

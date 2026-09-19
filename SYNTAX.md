@@ -40,11 +40,11 @@ A `.mau` file has up to three parts: one `<script>`, one markup root, one `<styl
 - Import lines must be at the start of a line. Import paths are relative to the compiled `.js`, which sits next to the `.mau`.
 
 ## Router
-Hash based (`#/path`), works from any static server. In the script:
+History based: real paths like `/docs/router`, no `#`. The server has to answer every unknown path with `index.html`. In the script:
 ```js
 const view = router({ "/": Home, "/inst/:id": Inst, "*": NotFound });   // pages get props { params, query }
 ```
-In the markup: `<main>{view()}</main>` and plain links `<a href="#/inst/3">`. `navigate("/x")` and `route()` (reactive `{ path, query }`) are in scope too.
+In the markup: `<main>{view()}</main>` and plain links `<a href="/inst/3">`. A click on a link to the same site is a navigation without a page load (not with ctrl/shift, `target`, `download`, other sites or `#anchors`). `navigate("/x")`, `navigate("/x", { replace: true })` and `route()` (reactive `{ path, query }`) are in scope too. `router(routes, { base: "/app" })` for a site below a path.
 
 ## Compile
 ```
