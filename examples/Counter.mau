@@ -1,0 +1,40 @@
+<script>
+  import Item from "./Item.js";
+
+  const n = signal(0);
+  const name = signal("<img src=x onerror=alert(1)>");
+  const items = computed(() => Array.from({ length: n() }, (_, i) => ({ id: i, label: "Eintrag " + (i + 1) })));
+  const inc = () => n.set(n() + 1);
+  onDestroy(() => console.log("Counter weg"));
+</script>
+
+<section class="counter">
+  <h2>{props.title ?? "Zähler"}</h2>
+  <p>Wert: <b>{n()}</b> ({n() % 2 ? "ungerade" : "gerade"})</p>
+  <button on:click={inc}>+1</button>
+  <button disabled={n() >= 3} on:click={inc}>max 3</button>
+  <input bind:value={name}>
+  <p class="name">{name()}</p>
+
+  {#if n() > 2}
+    <p>viel!</p>
+  {:else if n() > 0}
+    <p>ein bisschen</p>
+  {:else}
+    <p>noch nichts</p>
+  {/if}
+
+  <ul>
+    {#each items() as item (item.id)}
+      <Item label={item.label} />
+    {/each}
+  </ul>
+
+  <p>{@html "<em>raw ist explizit</em>"}</p>
+</section>
+
+<style>
+  :scope { border: 1px solid #888; padding: 1rem; border-radius: .5rem; }
+  b { color: rebeccapurple; }
+  .name { font-family: monospace; }
+</style>

@@ -1,0 +1,4 @@
+body { font: 16px system-ui, sans-serif; max-width: 40rem; margin: 2rem auto; padding: 0 1rem; }
+button { margin-right: .5rem; }
+#results li.ok::before { content: "✓ "; color: green; }
+#results li.fail::before { content: "✗ "; color: red; }
