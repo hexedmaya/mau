@@ -139,3 +139,17 @@ test("base: a site below a path keeps its prefix in the address, not in the rout
   click(outside);
   assert.equal(location.pathname, "/app/", "a link outside the base is not taken over");
 });
+
+test("a link to another page keeps its #anchor, a link to an anchor on this page is left to the browser", () => {
+  M.router({}, { base: "/" }); // the test before set a base
+  M.navigate("/start", { replace: true });
+  const a = link({ href: "/docs/router#server-setup" });
+  const ev = click(a);
+  assert.equal(ev.defaultPrevented, true, "taken over, the page changes");
+  assert.equal(location.pathname, "/docs/router");
+  assert.equal(location.hash, "#server-setup");
+  assert.equal(M.route().path, "/docs/router");
+  const same = link({ href: "/docs/router#other" });
+  click(same);
+  assert.equal(location.hash, "#server-setup", "left alone: the router did not touch the address");
+});

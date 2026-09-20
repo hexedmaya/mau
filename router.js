@@ -40,7 +40,7 @@ if (typeof document !== "undefined") {
     if (a.pathname === location.pathname && a.search === location.search && a.hash) return;
     if (base && !(a.pathname === base || a.pathname.startsWith(base + "/"))) return;
     e.preventDefault();
-    navigate((a.pathname.slice(base.length) || "/") + a.search);
+    navigate((a.pathname.slice(base.length) || "/") + a.search + a.hash);
   });
 }
 
