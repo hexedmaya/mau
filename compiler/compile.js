@@ -130,6 +130,120 @@ function hash(s) {
   return (h >>> 0).toString(36).padStart(6, "0").slice(0, 6);
 }
 
+// Scoped styles. Every selector gets an attribute that only the elements made by this component carry, so a
+// rule never reaches into a child component. Elements that the component writes and hands to a child (its
+// children) carry the attribute too, so their styles keep working. :scope is the root element of the component.
+// :global(...) is left alone, for the rare rule that has to reach outside. Rules inside @media, @supports,
+// @container and @layer are scoped, @keyframes and @font-face are copied. CSS nesting is not supported.
+export function scopeCss(css, attr) {
+  const mark = "[" + attr + "]";
+  const quoteEnd = (s, i) => {
+    for (let j = i + 1; j < s.length; j++) {
+      if (s[j] === "\\") j++;
+      else if (s[j] === s[i]) return j;
+    }
+    return s.length;
+  };
+  const commentEnd = (s, i) => {
+    const e = s.indexOf("*/", i + 2);
+    return e < 0 ? s.length : e + 1;
+  };
+  // the first of `stops` that is not inside a string, a comment, ( ) or [ ]
+  const find = (s, from, stops) => {
+    let depth = 0;
+    for (let i = from; i < s.length; i++) {
+      const c = s[i];
+      if (c === '"' || c === "'") i = quoteEnd(s, i);
+      else if (c === "/" && s[i + 1] === "*") i = commentEnd(s, i);
+      else if (c === "\\") i++;
+      else if (c === "(" || c === "[") depth++;
+      else if (c === ")" || c === "]") depth--;
+      else if (depth <= 0 && stops.includes(c)) return i;
+    }
+    return -1;
+  };
+  const blockEnd = (s, open) => {
+    let depth = 0;
+    for (let i = open; i < s.length; i++) {
+      const c = s[i];
+      if (c === '"' || c === "'") i = quoteEnd(s, i);
+      else if (c === "/" && s[i + 1] === "*") i = commentEnd(s, i);
+      else if (c === "\\") i++;
+      else if (c === "{") depth++;
+      else if (c === "}" && --depth === 0) return i;
+    }
+    return -1;
+  };
+  // where a pseudo-element starts in a compound selector: the mark has to go before it
+  const pseudoElement = (c) => {
+    for (let i = 0, depth = 0; i < c.length; i++) {
+      if (c[i] === "\\") i++;
+      else if (c[i] === "(" || c[i] === "[") depth++;
+      else if (c[i] === ")" || c[i] === "]") depth--;
+      else if (c[i] === ":" && depth === 0 && (c[i + 1] === ":" || /^:(before|after|first-line|first-letter)(?![\w-])/i.test(c.slice(i)))) return i;
+    }
+    return -1;
+  };
+  const compound = (c) => {
+    if (c.startsWith(":global(")) {
+      let depth = 1, end = -1;
+      for (let j = 8; j < c.length && end < 0; j++) {
+        if (c[j] === "(") depth++;
+        else if (c[j] === ")" && --depth === 0) end = j;
+      }
+      return end < 0 ? c : c.slice(8, end) + c.slice(end + 1);
+    }
+    if (/^:scope(?![\w-])/.test(c)) return "[" + attr + "=\"r\"]" + c.slice(6);
+    const at = pseudoElement(c);
+    return at < 0 ? c + mark : c.slice(0, at) + mark + c.slice(at);
+  };
+  const complex = (sel) => {
+    let out = "", cur = "", depth = 0;
+    for (let i = 0; i < sel.length; i++) {
+      const c = sel[i];
+      if (c === '"' || c === "'") { const e = quoteEnd(sel, i); cur += sel.slice(i, e + 1); i = e; continue; }
+      if (c === "\\") { cur += c + (sel[i + 1] ?? ""); i++; continue; }
+      if (c === "(" || c === "[") depth++;
+      else if (c === ")" || c === "]") depth--;
+      if (depth === 0 && (/\s/.test(c) || c === ">" || c === "+" || c === "~")) {
+        if (cur) out += compound(cur);
+        cur = "";
+        out += c;
+      } else cur += c;
+    }
+    return out + (cur ? compound(cur) : "");
+  };
+  const selectors = (list) => {
+    const parts = [];
+    for (let from = 0; ;) {
+      const at = find(list, from, ",");
+      parts.push(list.slice(from, at < 0 ? list.length : at).trim());
+      if (at < 0) break;
+      from = at + 1;
+    }
+    return parts.filter(Boolean).map(complex).join(", ");
+  };
+  const rules = (s) => {
+    let out = "";
+    for (let i = 0; i < s.length;) {
+      const stop = find(s, i, "{;");
+      const tail = () => (s.slice(i).trim() ? s.slice(i).trim() + "\n" : "");
+      if (stop < 0) return out + tail();
+      if (s[stop] === ";") { out += s.slice(i, stop + 1); i = stop + 1; continue; }
+      const end = blockEnd(s, stop);
+      if (end < 0) return out + tail();
+      const head = s.slice(i, stop).replace(/\/\*[\s\S]*?\*\//g, "").trim();
+      const body = s.slice(stop + 1, end);
+      if (/^@(media|supports|container|layer|document)(?![\w-])/i.test(head)) out += head + " {\n" + rules(body) + "}\n";
+      else if (head.startsWith("@")) out += head + " {" + body + "}\n";
+      else out += selectors(head) + " {" + body + "}\n";
+      i = end + 1;
+    }
+    return out;
+  };
+  return rules(css).trim();
+}
+
 export function compile(source, { file = "component.mau", runtime = "mau" } = {}) {
   const fail = (msg, pos = 0) => { throw new MauError(msg, file, source, pos); };
 
@@ -425,6 +539,7 @@ export function compile(source, { file = "component.mau", runtime = "mau" } = {}
           if (kids.length) props.push(`children: ${arr(kids)}`);
           return `${n.tag}({ ${props.join(", ")} })`;
         }
+        if (scopeAttr) props.push(`${q(scopeAttr)}: ${n === roots[0] ? q("r") : q("")}`);
         return `__h(${q(tagName)}, { ${props.join(", ")} }${kids.map((k) => ", " + k).join("")})`;
       }
     }
@@ -443,8 +558,8 @@ export function compile(source, { file = "component.mau", runtime = "mau" } = {}
   const imports = split.imports;
   const body = split.body.trim();
 
-  const scopeClass = parts.style !== null ? "mau-" + hash(source) : null;
-  const css = scopeClass ? `@scope (.${scopeClass}) {\n${parts.style.trim()}\n}` : null;
+  const scopeAttr = parts.style !== null ? "data-m-" + hash(source) : null;
+  const css = scopeAttr ? scopeCss(parts.style, scopeAttr) : null;
 
   const lines = [
     `// Generated by mau from ${file.split(/[\\/]/).pop()} - do not edit.`,
@@ -458,7 +573,8 @@ export function compile(source, { file = "component.mau", runtime = "mau" } = {}
   // The script is copied as written. Re-indenting it would change the content of multi-line strings.
   if (body) lines.push("  " + body);
   lines.push(`  const __root = ${gen(roots[0])};`);
-  if (scopeClass) lines.push(`  __root.classList.add(${q(scopeClass)});`, `  (__root.__mauScopes ||= []).push(${q(scopeClass)});`);
+  // a root that is another component is not an element of this template, so it is marked here
+  if (scopeAttr && /^[A-Z]/.test(roots[0].tag)) lines.push(`  __root.setAttribute(${q(scopeAttr)}, "r");`);
   lines.push("  return __root;", "}", "");
   return { code: lines.join("\n") };
 }

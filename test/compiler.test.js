@@ -2,7 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { JSDOM } from "jsdom";
-import { compile, MauError } from "../compiler/compile.js";
+import { compile, scopeCss, MauError } from "../compiler/compile.js";
 
 const dom = new JSDOM('<div id="app"></div>', { url: "http://localhost/" });
 Object.assign(globalThis, {
@@ -49,10 +49,36 @@ test("svg: a and title inside svg are marked, outside and inside foreignObject t
   assert.equal(code.match(/__h\("a"/g).length, 2);
 });
 
-test("style is scoped and added once", () => {
-  const code = js("<p>x</p>\n<style>:scope { color: red; }</style>");
-  assert.match(code, /@scope \(\.mau-[a-z0-9]{6}\)/);
-  assert.match(code, /classList\.add\("mau-/);
+test("style is scoped with an attribute that every element of the component carries", () => {
+  const code = js("<div><p>x</p><Item /></div>\n<style>:scope { color: red; } p { margin: 0; }</style>");
+  const attr = /"(data-m-[a-z0-9]{6})": "r"/.exec(code)[1];
+  assert.equal(code.match(new RegExp(`"${attr}": "`, "g")).length, 2, "the div (the root) and the p, not the component");
+  assert.ok(code.includes(`[${attr}=\\"r\\"] { color: red; }`) && code.includes(`p[${attr}] { margin: 0; }`), code);
+  assert.ok(!code.includes("@scope"));
+});
+
+test("a root that is another component is marked after it is built", () => {
+  const code = js("<Card />\n<style>:scope { color: red; }</style>");
+  assert.match(code, /__root\.setAttribute\("data-m-/);
+});
+
+test("scoped styles do not reach into a child component, but do reach what the parent passes to it", async () => {
+  const childCode = js('<div class="c">{props.children}<p class="own">child</p></div>\n<style>.own { color: blue; }</style>');
+  const childUrl = "data:text/javascript;base64," + Buffer.from(childCode).toString("base64");
+  const Parent = await build('<script>import Child from "' + childUrl + '";</script>\n<section><Child><p class="slot">slot</p></Child></section>\n<style>p { color: red; }</style>');
+  const el = Parent();
+  const attr = [...el.getAttributeNames()].find((n) => n.startsWith("data-m-"));
+  assert.ok(el.querySelector("p.slot").hasAttribute(attr), "slot content is written by the parent, so it is styled by the parent");
+  assert.ok(!el.querySelector("p.own").hasAttribute(attr), "the child's own element is not reached");
+});
+
+test("scopeCss: selectors, at-rules, pseudo-elements and :global", () => {
+  const css = scopeCss(":scope.dark .a > b:hover::before, i { x: y }\n@media (a) { .m { z: 1 } }\n@keyframes k { from { a: b } }\n:scope :global(.md h3) { q: 1 }\n.w:after { content: \"}\"; }", "d-x");
+  assert.ok(css.includes('[d-x="r"].dark .a[d-x] > b:hover[d-x]::before, i[d-x] { x: y }'), css);
+  assert.ok(css.includes("@media (a) {\n.m[d-x] { z: 1 }\n}"), css);
+  assert.ok(css.includes("@keyframes k { from { a: b } }"), css);
+  assert.ok(css.includes('[d-x="r"] .md h3 { q: 1 }'), css);
+  assert.ok(css.includes('.w[d-x]:after { content: "}"; }'), css);
 });
 
 test("</script> inside a string does not end the script block", async () => {

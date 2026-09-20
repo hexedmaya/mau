@@ -32,7 +32,7 @@ A `.mau` file has up to three parts: one `<script>`, one markup root, one `<styl
 - Attribute values: `"text"`, `"text {expr} text"`, or `{expr}`. No unquoted values.
 - Every `{expr}` is wrapped in a function and re-runs when the signals it reads change.
 - `{#each list as item (key)}`: keyed. Rows with the same key are kept and only moved. With a plain `item` (or `item, i`) pattern, a new object for the same key updates the row in place, so polling data is cheap. A destructuring pattern (`{ a, b }`) rebuilds instead. Without a key the index is used.
-- Styles compile to `@scope (.mau-xxxxxx)` and are added via a constructed stylesheet, so a strict CSP works. The root gets that class.
+- Styles are scoped and added via a constructed stylesheet, so a strict CSP works. Every element the component's template creates gets an attribute `data-m-xxxxxx`, and every selector part gets `[data-m-xxxxxx]` appended. `:scope` is the root element. A rule never reaches into a child component, but it does reach elements you pass to one as children. `:global(...)` leaves a selector alone. CSS nesting is not supported.
 - Text: write `\{` and `\}` for a literal brace (also inside attribute strings). Whitespace inside `<pre>` and `<textarea>` is kept.
 - SVG tags (`svg`, `path`, `g`, ...) are created in the SVG namespace.
 - Every event handler runs inside `batch()`: several signal writes give one round of updates. `batch(fn)` is also in scope.

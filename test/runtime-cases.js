@@ -63,13 +63,11 @@ export default [
     ok(a.getAttribute("href") === "#x" && !a.hasAttribute("hidden"), "back to true");
   }],
 
-  ["a class binding on a component root keeps the style class of the component", (M) => {
+  ["a class binding does not touch the attribute that scopes the styles", (M) => {
     const dark = M.signal(false);
-    const root = M.h("div", { class: () => "site " + (dark() ? "dark" : "light") });
-    root.classList.add("mau-abc123"); // what the compiler adds
-    (root.__mauScopes ||= []).push("mau-abc123");
+    const root = M.h("div", { "data-m-abc123": "", class: () => "site " + (dark() ? "dark" : "light") });
     dark.set(true);
-    ok(root.classList.contains("mau-abc123") && root.classList.contains("dark") && !root.classList.contains("light"), root.className);
+    ok(root.hasAttribute("data-m-abc123") && root.classList.contains("dark") && !root.classList.contains("light"), root.outerHTML);
   }],
 
   ["batch: one round of updates, events are batched", (M) => {

@@ -3,7 +3,7 @@
 import { signal, computed, effect, untracked, batch, onDestroy, router, route, navigate, h as __h, raw as __raw, each as __each, adoptStyle as __style } from "../../index.js";
 import Item from "./Item.js";
 
-__style("@scope (.mau-1glk3h) {\n:scope { border: 1px solid #888; padding: 1rem; border-radius: .5rem; }\n  b { color: rebeccapurple; }\n  .name { font-family: monospace; }\n}");
+__style("[data-m-1glk3h=\"r\"] { border: 1px solid #888; padding: 1rem; border-radius: .5rem; }\nb[data-m-1glk3h] { color: rebeccapurple; }\n.name[data-m-1glk3h] { font-family: monospace; }");
 
 export default function Counter(props = {}) {
   const n = signal(0);
@@ -11,8 +11,6 @@ export default function Counter(props = {}) {
   const items = computed(() => Array.from({ length: n() }, (_, i) => ({ id: i, label: "Eintrag " + (i + 1) })));
   const inc = () => n.set(n() + 1);
   onDestroy(() => console.log("Counter weg"));
-  const __root = __h("section", { "class": "counter" }, __h("h2", {  }, () => (props.title ?? "Zähler")), __h("p", {  }, "Wert: ", __h("b", {  }, () => (n())), " (", () => (n() % 2 ? "ungerade" : "gerade"), ")"), __h("button", { "onclick": inc }, "+1"), __h("button", { "disabled": () => (n() >= 3), "onclick": inc }, "max 3"), __h("input", { "value": () => (name)(), "oninput": (e) => (name).set(e.target.value) }), __h("p", { "class": "name" }, () => (name())), () => ((n() > 2) ? untracked(() => [__h("p", {  }, "viel!")]) : (n() > 0) ? untracked(() => [__h("p", {  }, "ein bisschen")]) : untracked(() => [__h("p", {  }, "noch nichts")])), __h("ul", {  }, __each(() => (items()), (item) => (item.id), (item) => [Item({ get "label"() { return (item.label); } })], true)), __h("p", {  }, () => __raw("<em>raw ist explizit</em>")));
-  __root.classList.add("mau-1glk3h");
-  (__root.__mauScopes ||= []).push("mau-1glk3h");
+  const __root = __h("section", { "class": "counter", "data-m-1glk3h": "r" }, __h("h2", { "data-m-1glk3h": "" }, () => (props.title ?? "Zähler")), __h("p", { "data-m-1glk3h": "" }, "Wert: ", __h("b", { "data-m-1glk3h": "" }, () => (n())), " (", () => (n() % 2 ? "ungerade" : "gerade"), ")"), __h("button", { "onclick": inc, "data-m-1glk3h": "" }, "+1"), __h("button", { "disabled": () => (n() >= 3), "onclick": inc, "data-m-1glk3h": "" }, "max 3"), __h("input", { "value": () => (name)(), "oninput": (e) => (name).set(e.target.value), "data-m-1glk3h": "" }), __h("p", { "class": "name", "data-m-1glk3h": "" }, () => (name())), () => ((n() > 2) ? untracked(() => [__h("p", { "data-m-1glk3h": "" }, "viel!")]) : (n() > 0) ? untracked(() => [__h("p", { "data-m-1glk3h": "" }, "ein bisschen")]) : untracked(() => [__h("p", { "data-m-1glk3h": "" }, "noch nichts")])), __h("ul", { "data-m-1glk3h": "" }, __each(() => (items()), (item) => (item.id), (item) => [Item({ get "label"() { return (item.label); } })], true)), __h("p", { "data-m-1glk3h": "" }, () => __raw("<em>raw ist explizit</em>")));
   return __root;
 }
