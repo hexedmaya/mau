@@ -63,6 +63,10 @@ Any static server works, and for an app with paths like `/instance/3` it has to 
 - mau-website: the website and docs, built with mau (not in this repo)
 - mau-vs: VS Code syntax highlighting for `.mau` (not in this repo)
 
+## Contributing and security
+
+[CONTRIBUTING.md](CONTRIBUTING.md) says how to work on mau. Security problems: [SECURITY.md](SECURITY.md).
+
 ## License
 
 mau License 1.0. mau is source-available, not an open source license. You may use it, also commercially, to build your own products and you do not have to publish their source. You may not sell mau itself. Read the full text in [LICENSE](LICENSE). How the name and logo may be used: [BRAND-POLICY.md](BRAND-POLICY.md).

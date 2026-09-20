@@ -1,7 +1,7 @@
 // Command line: src/ becomes dist/ (a mirrored tree), other files are copied, the runtime import path is worked out.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -162,4 +162,34 @@ test("too many arguments or an unknown option: usage and exit code 2", () => {
   const p = project();
   assert.equal(run(p.dir, "a", "b").status, 2);
   assert.match(run(p.dir, "--nope").stderr, /usage/);
+});
+
+async function waitFor(fn, ms = 8000) {
+  const start = Date.now();
+  while (Date.now() - start < ms) {
+    try { if (fn()) return; } catch {}
+    await new Promise((r) => setTimeout(r, 50));
+  }
+  assert.fail("timed out waiting for the build");
+}
+
+test("--watch builds at once and rebuilds on a change, a new file, a copied file and a removed file", async () => {
+  const p = project();
+  const child = spawn(process.execPath, [cli, "--watch"], { cwd: p.dir });
+  try {
+    await waitFor(() => p.has("dist/A.js"));
+    p.put("src/A.mau", "<p>changed</p>");
+    await waitFor(() => p.read("dist/A.js").includes("changed"));
+    p.put("src/New.mau", "<p>new</p>");
+    await waitFor(() => p.has("dist/New.js"));
+    p.put("src/lib/util.js", "export const x = 2;" + String.fromCharCode(10));
+    await waitFor(() => p.read("dist/lib/util.js").includes("2"));
+    fs.rmSync(path.join(p.dir, "src", "New.mau"));
+    await waitFor(() => !p.has("dist/New.js"));
+    p.put("src/A.mau", ["<div>", "  <p>", "</div>"].join(String.fromCharCode(10)));
+    await new Promise((r) => setTimeout(r, 400));
+    assert.ok(p.read("dist/A.js").includes("changed"), "a broken file keeps its last good output while watching");
+  } finally {
+    child.kill();
+  }
 });

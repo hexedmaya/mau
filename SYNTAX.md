@@ -28,6 +28,7 @@ A `.mau` file has up to three parts: one `<script>`, one markup root, one `<styl
 
 ## Rules
 - Exactly **one root element**. Components are capitalized tags (`<Item label={x} />`). A prop with an expression is a getter: `{props.label}` in the markup stays live, while `const { label } = props` reads it once.
+- `bind:value` and `bind:checked` need a signal. On `type=number` / `type=range` the signal gets a number (`null` while empty), on `<select>` the chosen value. `bind:group={signal}` with `<input type="radio" value="x">` holds the value of the selected radio button.
 - Attribute values: `"text"`, `"text {expr} text"`, or `{expr}`. No unquoted values.
 - Every `{expr}` is wrapped in a function and re-runs when the signals it reads change.
 - `{#each list as item (key)}`: keyed. Rows with the same key are kept and only moved. With a plain `item` (or `item, i`) pattern, a new object for the same key updates the row in place, so polling data is cheap. A destructuring pattern (`{ a, b }`) rebuilds instead. Without a key the index is used.

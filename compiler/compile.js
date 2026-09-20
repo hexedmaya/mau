@@ -338,7 +338,20 @@ export function compile(source, { file = "component.mau", runtime = "mau" } = {}
     "`" + segs.map((s) => (typeof s === "string" ? s.replace(/\\|`|\$\{/g, "\\$&") : "${" + s.expr + "}")).join("") + "`";
   const genStr = (segs) => (isStatic(segs) ? q(segs.join("")) : "() => " + template(segs));
 
-  function genProps(attrs, isComp) {
+  // the text a static or interpolated attribute stands for, as a JS expression (used by bind:group)
+  const attrExpr = (attrs, name) => {
+    const x = attrs.find((y) => y.name === name);
+    if (!x) return null;
+    if (x.kind === "expr") return `(${x.expr})`;
+    if (x.kind === "str") return isStatic(x.segs) ? q(x.segs.join("")) : template(x.segs);
+    return "true";
+  };
+  const staticAttr = (attrs, name) => {
+    const x = attrs.find((y) => y.name === name);
+    return x && x.kind === "str" && isStatic(x.segs) ? x.segs.join("") : null;
+  };
+
+  function genProps(attrs, isComp, tag) {
     const out = [];
     for (const a of attrs) {
       const { name } = a;
@@ -349,8 +362,26 @@ export function compile(source, { file = "component.mau", runtime = "mau" } = {}
         const prop = name.slice(5);
         if (isComp) fail("bind: works on elements, not components", a.pos);
         if (a.kind !== "expr") fail(`${name} needs {signal}`, a.pos);
-        out.push(`${q(prop)}: () => (${a.expr})()`);
-        out.push(`${q(prop === "checked" ? "onchange" : "oninput")}: (e) => (${a.expr}).set(e.target.${prop})`);
+        const sig = `(${a.expr})`;
+        const type = staticAttr(attrs, "type");
+        if (prop === "group") {
+          // radio buttons that share one signal: it holds the value of the selected one
+          if (tag !== "input" || type !== "radio") fail("bind:group works on <input type=\"radio\"> (checkbox groups are not supported yet)", a.pos);
+          const value = attrExpr(attrs, "value");
+          if (value === null) fail("bind:group needs a value attribute on the radio button", a.pos);
+          out.push(`"checked": () => ${sig}() === ${value}`);
+          out.push(`"onchange": (e) => { if (e.target.checked) ${sig}.set(${value}); }`);
+        } else if (prop === "value" && (type === "number" || type === "range")) {
+          // a number, or null while the field is empty
+          out.push(`"value": () => ${sig}()`);
+          out.push(`"oninput": (e) => ${sig}.set(e.target.value === "" ? null : Number(e.target.value))`);
+        } else if (prop === "value" && tag === "select") {
+          out.push(`"value": () => ${sig}()`);
+          out.push(`"onchange": (e) => ${sig}.set(e.target.value)`);
+        } else {
+          out.push(`${q(prop)}: () => ${sig}()`);
+          out.push(`${q(prop === "checked" ? "onchange" : "oninput")}: (e) => ${sig}.set(e.target.${prop})`);
+        }
       } else if (a.kind === "bool") out.push(`${q(name)}: true`);
       // Component props that hold an expression are getters: the expression runs whenever the component
       // reads props.name, so inside a {…} or an effect it stays live. Reading once (destructuring) is a snapshot.
@@ -379,7 +410,7 @@ export function compile(source, { file = "component.mau", runtime = "mau" } = {}
         return `__each(() => (${n.list}), ${n.key ? `(${n.pat}) => (${n.key})` : "null"}, (${n.pat}) => ${arr(genChildren(n.body))}, ${live})`;
       case "el": {
         const isComp = /^[A-Z]/.test(n.tag);
-        const props = genProps(n.attrs, isComp);
+        const props = genProps(n.attrs, isComp, n.tag);
         const keep = !isComp && (n.tag === "pre" || n.tag === "textarea");
         if (keep) preserve++;
         // inside <svg>, `a` and `title` are SVG elements; <foreignObject> switches back to HTML

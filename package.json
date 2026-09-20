@@ -2,6 +2,24 @@
   "name": "hexedmaya-mau",
   "version": "0.1.0",
   "description": "mau: Make A UI. A tiny, dependency-free frontend framework.",
+  "license": "SEE LICENSE IN LICENSE",
+  "author": "hexedmaya",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/hexedmaya/mau.git"
+  },
+  "homepage": "https://mau.melloo.me",
+  "bugs": {
+    "url": "https://github.com/hexedmaya/mau/issues"
+  },
+  "keywords": [
+    "frontend",
+    "framework",
+    "compiler",
+    "no-dependencies",
+    "csp",
+    "signals"
+  ],
   "type": "module",
   "main": "index.js",
   "bin": {
@@ -12,7 +30,5 @@
   },
   "devDependencies": {
     "jsdom": "^30.1.0"
-  },
-  "author": "hexedmaya",
-  "license": "SEE LICENSE IN LICENSE"
+  }
 }

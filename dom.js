@@ -144,8 +144,11 @@ export function h(tag, props, ...children) {
     children.unshift(props);
     props = null;
   }
+  let selectValue; // a <select> takes its value after the options exist, so it waits for the children
   for (const [key, val] of Object.entries(props || {})) {
-    if (/^on[a-z]/i.test(key)) {
+    if (key === "value" && tag === "select") {
+      selectValue = val;
+    } else if (/^on[a-z]/i.test(key)) {
       // one event = one round of updates, however many signals the handler writes
       if (typeof val === "function") el.addEventListener(key.slice(2).toLowerCase(), (e) => batch(() => val(e)));
       else if (val != null && val !== false) throw new Error(`mau: ${key} needs a function, not a string`);
@@ -158,6 +161,10 @@ export function h(tag, props, ...children) {
     }
   }
   for (const c of children) append(el, c);
+  if (selectValue !== undefined) {
+    if (typeof selectValue === "function") effect(() => setProp(el, "value", selectValue()));
+    else setProp(el, "value", selectValue);
+  }
   return el;
 }
 
