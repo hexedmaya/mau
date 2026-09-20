@@ -178,6 +178,37 @@ export default [
     ok(host.textContent === "", "branch removed");
   }],
 
+  ["each: a key used twice does not leave rows behind that nobody can remove", (M) => {
+    const c = { id: 2, t: "c" };
+    const data = M.signal([{ id: 1, t: "a" }, { id: 1, t: "b" }, c]);
+    const box = document.createElement("div");
+    let destroyed = 0;
+    let warned = 0;
+    const warn = console.warn;
+    console.warn = () => warned++;
+    try {
+      M.mount(box, () => M.h("ul", {}, M.each(() => data(), (x) => x.id, (x) => { M.onDestroy(() => destroyed++); return [M.h("li", {}, x.t)]; })));
+      ok(box.querySelectorAll("li").length === 3 && warned === 1, "all three rows, one warning");
+      data.set([c]);
+      ok(box.querySelectorAll("li").length === 1 && box.textContent === "c", "the extra rows are gone: " + box.textContent);
+      ok(destroyed === 2, "and their cleanup ran: " + destroyed);
+      data.set([]);
+      ok(box.querySelectorAll("li").length === 0 && destroyed === 3, "an empty list is empty");
+    } finally { console.warn = warn; }
+  }],
+
+  ["each: a row that shows its index follows a reorder", (M) => {
+    const rows = M.signal([{ id: "a" }, { id: "b" }, { id: "c" }]);
+    const box = document.createElement("div");
+    M.mount(box, () => M.h("ul", {}, M.each(() => rows(), (r) => r.id, (r, i) => [M.h("li", {}, i + ":" + r.id)], true, true)));
+    ok([...box.querySelectorAll("li")].map((x) => x.textContent).join() === "0:a,1:b,2:c", "first");
+    const [a, b, c] = rows();
+    rows.set([c, a, b]);
+    ok([...box.querySelectorAll("li")].map((x) => x.textContent).join() === "0:c,1:a,2:b", [...box.querySelectorAll("li")].map((x) => x.textContent).join());
+    rows.set([c, a]);
+    ok([...box.querySelectorAll("li")].map((x) => x.textContent).join() === "0:c,1:a", "removed");
+  }],
+
   ["each: keyed rows are moved, changed items are rebuilt, duplicates warn", (M) => {
     const data = M.signal([{ id: 1, t: "a" }, { id: 2, t: "b" }, { id: 3, t: "c" }]);
     const box = document.createElement("div");

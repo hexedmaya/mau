@@ -1,6 +1,6 @@
 {
   "name": "hexedmaya-mau",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "mau: Make A UI. A tiny, dependency-free frontend framework.",
   "license": "SEE LICENSE IN LICENSE",
   "author": "hexedmaya",
@@ -20,6 +20,9 @@
     "csp",
     "signals"
   ],
+  "engines": {
+    "node": ">=22"
+  },
   "type": "module",
   "main": "index.js",
   "bin": {

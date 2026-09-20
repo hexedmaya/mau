@@ -21,8 +21,8 @@ export const raw = (html) => new Raw(String(html));
 // Keyed list: an entry is rebuilt only when its key is new or its item changed; others are only moved.
 // With `live`, a row whose key stays but whose item is a new object is updated in place (polling data),
 // through a proxy that always reads the newest object.
-class Each { constructor(list, key, render, live) { this.list = list; this.key = key; this.render = render; this.live = live; } }
-export const each = (list, key, render, live) => new Each(list, key, render, live);
+class Each { constructor(list, key, render, live, indexed) { this.list = list; this.key = key; this.render = render; this.live = live; this.indexed = indexed; } }
+export const each = (list, key, render, live, indexed) => new Each(list, key, render, live, indexed);
 
 const isObj = (v) => v !== null && typeof v === "object";
 
@@ -84,11 +84,18 @@ function append(parent, child) {
     let entries = new Map();
     effect(() => {
       const next = new Map();
+      const seen = new Map();
       let cursor = start;
       child.list().forEach((item, i) => {
-        const k = child.key ? child.key(item, i) : i;
-        if (next.has(k)) console.warn("mau: duplicate key in {#each}:", k);
+        let k = child.key ? child.key(item, i) : i;
+        // a key that is used twice: warn, and give the later rows keys of their own, so that every row is known
+        // and can be removed again
+        const times = seen.get(k) ?? 0;
+        seen.set(k, times + 1);
+        if (times) { console.warn("mau: duplicate key in {#each}:", k); k = String(k) + "#dup" + times; }
         let e = entries.get(k);
+        // a row that shows its index has to be built again when the index changes
+        if (e && child.indexed && e.i !== i) e = null;
         if (e && Object.is(e.item, item)) entries.delete(k);
         else if (e && e.sig && isObj(item)) { e.item = item; e.sig.set(item); entries.delete(k); }
         else {
@@ -100,7 +107,7 @@ function append(parent, child) {
           const sig = child.live && isObj(item) ? signal(item) : null;
           try { untracked(() => append(frag, child.render(sig ? rowProxy(sig) : item, i))); } finally { setOwner(prev); }
           frag.append(en);
-          e = { item, sig, s, e: en, disposers };
+          e = { item, sig, i, s, e: en, disposers };
         }
         next.set(k, e);
         if (cursor.nextSibling !== e.s) cursor.after(...range(e));

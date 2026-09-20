@@ -117,11 +117,32 @@ test("links the router must leave alone", () => {
   }
 });
 
+test("a repeated query key gives an array, a single one stays a string", () => {
+  M.navigate("/find?tag=a&tag=b&tag=c&page=2&__proto__=x");
+  const q = M.route().query;
+  assert.deepEqual(q.tag, ["a", "b", "c"]);
+  assert.equal(q.page, "2");
+  assert.equal(Object.getPrototypeOf(q), Object.prototype, "a key named __proto__ is only a key");
+});
+
+test("a link with data-native or rel=external is left to the browser", () => {
+  M.navigate("/start");
+  const before = location.pathname;
+  assert.equal(click(link({ href: "/export.csv", "data-native": "" })).defaultPrevented, true, "the test page prevents every click");
+  assert.equal(location.pathname, before, "the router did not navigate");
+  click(link({ href: "/manual.pdf", rel: "external" }));
+  assert.equal(location.pathname, before);
+  click(link({ href: "/somewhere" }));
+  assert.equal(location.pathname, "/somewhere", "a plain link still navigates");
+});
+
 test("the back button updates the route", async () => {
   M.navigate("/about");
   M.navigate("/try");
+  // wait for the popstate event itself, not for a time
+  const popped = new Promise((r) => dom.window.addEventListener("popstate", r, { once: true }));
   history.back();
-  await wait();
+  await popped;
   assert.equal(M.route().path, "/about");
 });
 

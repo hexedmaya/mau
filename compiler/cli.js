@@ -27,6 +27,10 @@ const MARKER = ".mau-dist";
 const args = process.argv.slice(2);
 const watch = args.includes("--watch");
 const ri = args.indexOf("--runtime");
+if (ri >= 0 && (args[ri + 1] === undefined || args[ri + 1].startsWith("--"))) {
+  console.error("--runtime needs a path.  usage: mau [project] [--watch] [--runtime <path>]");
+  process.exit(2);
+}
 const runtimeOpt = ri >= 0 ? args.splice(ri, 2)[1] : null;
 const positional = args.filter((a) => !a.startsWith("--"));
 if (positional.length > 1 || args.some((a) => a.startsWith("--") && a !== "--watch")) {

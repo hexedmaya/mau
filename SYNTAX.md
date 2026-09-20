@@ -1,4 +1,4 @@
-# .mau syntax (v0.1 draft)
+# .mau syntax
 
 A `.mau` file has up to three parts: one `<script>`, one markup root, one `<style>`.
 
@@ -31,7 +31,7 @@ A `.mau` file has up to three parts: one `<script>`, one markup root, one `<styl
 - `bind:value` and `bind:checked` need a signal. On `type=number` / `type=range` the signal gets a number (`null` while empty), on `<select>` the chosen value. `bind:group={signal}` with `<input type="radio" value="x">` holds the value of the selected radio button.
 - Attribute values: `"text"`, `"text {expr} text"`, or `{expr}`. No unquoted values.
 - Every `{expr}` is wrapped in a function and re-runs when the signals it reads change.
-- `{#each list as item (key)}`: keyed. Rows with the same key are kept and only moved. With a plain `item` (or `item, i`) pattern, a new object for the same key updates the row in place, so polling data is cheap. A destructuring pattern (`{ a, b }`) rebuilds instead. Without a key the index is used.
+- `{#each list as item (key)}`: keyed. Rows with the same key are kept and only moved. With a plain `item` (or `item, i`) pattern, a new object for the same key updates the row in place, so polling data is cheap. A destructuring pattern (`{ a, b }`) rebuilds instead. Without a key the index is used. A key that is used twice prints a warning, and the later rows are kept apart, so every row can still be removed. A row that shows its index (`item, i`) is built again when the index changes, for example after a reorder.
 - Styles are scoped and added via a constructed stylesheet, so a strict CSP works. Every element the component's template creates gets an attribute `data-m-xxxxxx`, and every selector part gets `[data-m-xxxxxx]` appended. `:scope` is the root element. A rule never reaches into a child component, but it does reach elements you pass to one as children. `:global(...)` leaves a selector alone. CSS nesting is not supported.
 - Text: write `\{` and `\}` for a literal brace (also inside attribute strings). Whitespace inside `<pre>` and `<textarea>` is kept.
 - SVG tags (`svg`, `path`, `g`, ...) are created in the SVG namespace.
@@ -45,7 +45,7 @@ History based: real paths like `/docs/router`, no `#`. The server has to answer 
 ```js
 const view = router({ "/": Home, "/inst/:id": Inst, "*": NotFound });   // pages get props { params, query }
 ```
-In the markup: `<main>{view()}</main>` and plain links `<a href="/inst/3">`. A click on a link to the same site is a navigation without a page load (not with ctrl/shift, `target`, `download`, other sites or `#anchors`). `navigate("/x")`, `navigate("/x", { replace: true })` and `route()` (reactive `{ path, query }`) are in scope too. `router(routes, { base: "/app" })` for a site below a path.
+In the markup: `<main>{view()}</main>` and plain links `<a href="/inst/3">`. A click on a link to the same site is a navigation without a page load (not with ctrl/shift, `target`, `download`, other sites, `#anchors`, or a link with `data-native` or `rel="external"`, which the server answers). A query key that appears twice (`?tag=a&tag=b`) gives an array in `query`. `navigate("/x")`, `navigate("/x", { replace: true })` and `route()` (reactive `{ path, query }`) are in scope too. `router(routes, { base: "/app" })` for a site below a path.
 
 ## Compile
 ```

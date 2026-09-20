@@ -37,6 +37,8 @@ if (typeof document !== "undefined") {
     if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
     const a = e.target?.closest?.("a[href]");
     if (!a || (a.target && a.target !== "_self") || a.hasAttribute("download") || a.origin !== location.origin) return;
+    // data-native and rel="external" mark a link the server has to answer, like a file or an export
+    if (a.hasAttribute("data-native") || a.getAttribute("rel") === "external") return;
     if (a.pathname === location.pathname && a.search === location.search && a.hash) return;
     if (base && !(a.pathname === base || a.pathname.startsWith(base + "/"))) return;
     e.preventDefault();
@@ -47,7 +49,10 @@ if (typeof document !== "undefined") {
 // Reactive: { path, query }
 export const route = () => {
   const [path, qs = ""] = current().split("?");
-  return { path, query: Object.fromEntries(new URLSearchParams(qs)) };
+  // ?tag=a&tag=b gives { tag: ["a", "b"] }, a key that appears once stays a string
+  const values = new Map();
+  for (const [k, v] of new URLSearchParams(qs)) values.set(k, values.has(k) ? [].concat(values.get(k), v) : v);
+  return { path, query: Object.fromEntries(values) };
 };
 
 const safeDecode = (s) => { try { return decodeURIComponent(s); } catch { return s; } };

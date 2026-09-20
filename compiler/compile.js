@@ -27,7 +27,11 @@ const NAME = /[A-Za-z][\w:.-]*/y;
 const ATTR = /[^\s=\/>{}"']+/y;
 const q = JSON.stringify;
 
-// Index of the `}` that closes a `{` whose content starts at `start`. Skips strings and template literals.
+// Words after which a / starts a regular expression and not a division.
+const BEFORE_REGEX = new Set("return typeof case in of void delete new throw yield await else do instanceof".split(" "));
+
+// Index of the `}` that closes a `{` whose content starts at `start`. Skips strings, template literals,
+// comments and regular expressions, so a } inside them does not end the expression.
 function scanExpr(src, start, fail) {
   let depth = 0;
   const skipStr = (p, quote) => {
@@ -45,14 +49,41 @@ function scanExpr(src, start, fail) {
     }
     return fail("unclosed template literal", p);
   };
+  // the last character of a regular expression that starts at p, or -1 when it is a division after all
+  const skipRegex = (p) => {
+    let inClass = false;
+    for (let q = p + 1; q < src.length && src[q] !== "\n"; q++) {
+      const c = src[q];
+      if (c === "\\") q++;
+      else if (c === "[") inClass = true;
+      else if (c === "]") inClass = false;
+      else if (c === "/" && !inClass) {
+        while (/[a-z]/i.test(src[q + 1] ?? "")) q++;
+        return q;
+      }
+    }
+    return -1;
+  };
+  let prev = ""; // the last character that is not a space before the current one, "a" after a string or a regex
   for (let p = start; p < src.length; p++) {
     const c = src[p];
-    if (c === '"' || c === "'") p = skipStr(p, c);
-    else if (c === "`") p = skipTpl(p);
-    else if (c === "{") depth++;
-    else if (c === "}") {
-      if (depth === 0) return p;
-      depth--;
+    if (c === '"' || c === "'") { p = skipStr(p, c); prev = "a"; }
+    else if (c === "`") { p = skipTpl(p); prev = "a"; }
+    else if (c === "/" && src[p + 1] === "/") { while (p < src.length && src[p] !== "\n") p++; }
+    else if (c === "/" && src[p + 1] === "*") {
+      const e = src.indexOf("*/", p + 2);
+      if (e < 0) return fail("unclosed comment", p);
+      p = e + 1;
+    } else if (c === "/" && p > start && (prev === "" || !/[)\]}\w$]/.test(prev) || BEFORE_REGEX.has(/([A-Za-z_$][\w$]*)\s*$/.exec(src.slice(start, p))?.[1] ?? "")) && skipRegex(p) >= 0) {
+      p = skipRegex(p);
+      prev = "a";
+    } else {
+      if (c === "{") depth++;
+      else if (c === "}") {
+        if (depth === 0) return p;
+        depth--;
+      }
+      if (!/\s/.test(c)) prev = c;
     }
   }
   return fail("missing closing }", start - 1);
@@ -521,7 +552,15 @@ export function compile(source, { file = "component.mau", runtime = "mau" } = {}
       case "each":
         // with a plain `item` / `item, i` pattern, a changed item object updates the row in place
         const live = /^[A-Za-z_$][\w$]*(\s*,\s*[A-Za-z_$][\w$]*)?$/.test(n.pat.trim());
-        return `__each(() => (${n.list}), ${n.key ? `(${n.pat}) => (${n.key})` : "null"}, (${n.pat}) => ${arr(genChildren(n.body))}, ${live})`;
+        // a comma outside of braces means a second name: the index. Rows that show it are built again when it changes.
+        let indexed = false;
+        for (let d = 0, i = 0; i < n.pat.length && !indexed; i++) {
+          const ch = n.pat[i];
+          if ("{[(".includes(ch)) d++;
+          else if ("}])".includes(ch)) d--;
+          else if (ch === "," && d === 0) indexed = true;
+        }
+        return `__each(() => (${n.list}), ${n.key ? `(${n.pat}) => (${n.key})` : "null"}, (${n.pat}) => ${arr(genChildren(n.body))}, ${live}${indexed ? ", true" : ""})`;
       case "el": {
         const isComp = /^[A-Z]/.test(n.tag);
         const props = genProps(n.attrs, isComp, n.tag);

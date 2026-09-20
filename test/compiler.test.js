@@ -81,6 +81,30 @@ test("scopeCss: selectors, at-rules, pseudo-elements and :global", () => {
   assert.ok(css.includes('.w[d-x]:after { content: "}"; }'), css);
 });
 
+test("a } inside a comment or a regular expression does not end the expression", async () => {
+  const C = await build(`<script>
+  const value = 1, text = "a}b";
+</script>
+<p>{value /* } */ + 1} {String((/}/).test(text))} {text.replace(/[}]/g, "!")} {value / 2 + value / 4} {value // }
+}</p>`);
+  assert.equal(C().textContent, "2 true a!b 0.75 1");
+});
+
+test("a } inside a string in an expression, and a division that looks like a regular expression", async () => {
+  const C = await build(`<script>
+  const n = 8, f = (x) => x;
+</script>
+<p>{"}" + n} {f(n) / 2} {n / 2 / 2} {[n][0] / 4}</p>`);
+  assert.equal(C().textContent, "}8 4 2 2");
+});
+
+test("#each: the flag for an index is only set when the row shows one", () => {
+  assert.match(js("<ul>{#each xs() as x, i (x.id)}<li>{i}</li>{/each}</ul>"), /, true, true\)/);
+  assert.doesNotMatch(js("<ul>{#each xs() as x (x.id)}<li>{x.t}</li>{/each}</ul>"), /, true, true\)/);
+  assert.doesNotMatch(js("<ul>{#each xs() as { id, t } (id)}<li>{t}</li>{/each}</ul>"), /, true\)/);
+  assert.match(js("<ul>{#each xs() as { id, t }, i (id)}<li>{t}{i}</li>{/each}</ul>"), /, false, true\)/);
+});
+
 test("</script> inside a string does not end the script block", async () => {
   const C = await build(`<script>
   const t = "a </script> b"; // it's fine

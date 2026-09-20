@@ -70,6 +70,16 @@ test("default runtime path points at the mau folder this compiler lives in, meas
   assert.equal(importPath(path.join(p.dir, "dist", "deep", "B.js")), posixRel(path.join(p.dir, "dist", "deep"), runtimeEntry));
 });
 
+test("--runtime without a path is a usage error, not a silent default", () => {
+  const p = project();
+  for (const args of [["--runtime"], ["--runtime", "--watch"]]) {
+    const r = run(p.dir, ...args);
+    assert.equal(r.status, 2, args.join(" "));
+    assert.match(r.stderr, /--runtime needs a path/);
+  }
+  assert.ok(!fs.existsSync(path.join(p.dir, "dist")), "nothing was built");
+});
+
 test("--runtime ./file: the import path is worked out per file", () => {
   const p = project();
   const r = run(p.dir, "--runtime", "./vendor/mau/index.js");
