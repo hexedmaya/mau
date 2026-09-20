@@ -13,5 +13,6 @@ export default function Counter(props = {}) {
   onDestroy(() => console.log("Counter weg"));
   const __root = __h("section", { "class": "counter" }, __h("h2", {  }, () => (props.title ?? "Zähler")), __h("p", {  }, "Wert: ", __h("b", {  }, () => (n())), " (", () => (n() % 2 ? "ungerade" : "gerade"), ")"), __h("button", { "onclick": inc }, "+1"), __h("button", { "disabled": () => (n() >= 3), "onclick": inc }, "max 3"), __h("input", { "value": () => (name)(), "oninput": (e) => (name).set(e.target.value) }), __h("p", { "class": "name" }, () => (name())), () => ((n() > 2) ? untracked(() => [__h("p", {  }, "viel!")]) : (n() > 0) ? untracked(() => [__h("p", {  }, "ein bisschen")]) : untracked(() => [__h("p", {  }, "noch nichts")])), __h("ul", {  }, __each(() => (items()), (item) => (item.id), (item) => [Item({ get "label"() { return (item.label); } })], true)), __h("p", {  }, () => __raw("<em>raw ist explizit</em>")));
   __root.classList.add("mau-1glk3h");
+  (__root.__mauScopes ||= []).push("mau-1glk3h");
   return __root;
 }

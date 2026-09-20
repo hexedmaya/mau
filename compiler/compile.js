@@ -458,7 +458,7 @@ export function compile(source, { file = "component.mau", runtime = "mau" } = {}
   // The script is copied as written. Re-indenting it would change the content of multi-line strings.
   if (body) lines.push("  " + body);
   lines.push(`  const __root = ${gen(roots[0])};`);
-  if (scopeClass) lines.push(`  __root.classList.add(${q(scopeClass)});`);
+  if (scopeClass) lines.push(`  __root.classList.add(${q(scopeClass)});`, `  (__root.__mauScopes ||= []).push(${q(scopeClass)});`);
   lines.push("  return __root;", "}", "");
   return { code: lines.join("\n") };
 }

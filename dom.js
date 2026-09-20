@@ -53,6 +53,8 @@ const URL_ATTRS = new Set(["href", "src", "action", "formaction", "poster", "dat
 const BAD_URL = /^[\s\u0000-\u001f]*(?:javascript|vbscript):/i;
 
 function setProp(el, key, val) {
+  // a component's style class (added by the compiler) must survive when the class attribute changes
+  if (key === "class" && el.__mauScopes) val = (val == null || val === false ? "" : String(val) + " ") + el.__mauScopes.join(" ");
   if (val == null || val === false) {
     el.removeAttribute(key);
     // only these are live properties that removing the attribute does not reset

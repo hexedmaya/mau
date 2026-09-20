@@ -63,6 +63,15 @@ export default [
     ok(a.getAttribute("href") === "#x" && !a.hasAttribute("hidden"), "back to true");
   }],
 
+  ["a class binding on a component root keeps the style class of the component", (M) => {
+    const dark = M.signal(false);
+    const root = M.h("div", { class: () => "site " + (dark() ? "dark" : "light") });
+    root.classList.add("mau-abc123"); // what the compiler adds
+    (root.__mauScopes ||= []).push("mau-abc123");
+    dark.set(true);
+    ok(root.classList.contains("mau-abc123") && root.classList.contains("dark") && !root.classList.contains("light"), root.className);
+  }],
+
   ["batch: one round of updates, events are batched", (M) => {
     const x = M.signal(1), y = M.signal(1), seen = [];
     M.effect(() => seen.push(x() + "," + y()));
