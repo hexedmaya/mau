@@ -37,7 +37,7 @@ A `.mau` file has up to three parts: one `<script>`, one markup root, one `<styl
 - Every event handler runs inside `batch()`: several signal writes give one round of updates. `batch(fn)` is also in scope.
 - A `</script>` inside a string or comment in the script part is fine.
 - Names reserved in the script: `signal computed effect untracked batch onDestroy props` and the `__`-prefixed helpers.
-- Import lines must be at the start of a line. Import paths are relative to the compiled `.js`, which sits next to the `.mau`.
+- Import lines must be at the start of a line. Import a component by the name of its compiled file (`./Item.js`). `dist/` mirrors `src/` and sits next to it, so that path and relative paths out of the project (`../mau/index.js`) are the same in both.
 
 ## Router
 History based: real paths like `/docs/router`, no `#`. The server has to answer every unknown path with `index.html`. In the script:
@@ -48,7 +48,7 @@ In the markup: `<main>{view()}</main>` and plain links `<a href="/inst/3">`. A c
 
 ## Compile
 ```
-node mau/compiler/cli.js examples        # every .mau in the folder -> .js next to it
-node mau/compiler/cli.js examples --watch
+node mau/compiler/cli.js            # src/ -> dist/, from the project folder
+node mau/compiler/cli.js --watch
 ```
 Compile errors show `file:line:col`. Runtime source maps are not done yet.

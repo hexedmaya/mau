@@ -1,4 +1,4 @@
-// Command line: output files, and how the runtime import path is worked out for every file.
+// Command line: src/ becomes dist/ (a mirrored tree), other files are copied, the runtime import path is worked out.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
@@ -11,13 +11,18 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const cli = path.join(here, "..", "compiler", "cli.js");
 const runtimeEntry = path.join(here, "..", "index.js");
 
-// a small project: src/A.mau and src/deep/B.mau
+// a small project: src/A.mau, src/deep/B.mau, src/lib/util.js, src/style.css
 function project() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mau-cli-"));
-  fs.mkdirSync(path.join(dir, "src", "deep"), { recursive: true });
-  fs.writeFileSync(path.join(dir, "src", "A.mau"), "<p>a</p>");
-  fs.writeFileSync(path.join(dir, "src", "deep", "B.mau"), "<p>b</p>");
-  return dir;
+  const put = (rel, content) => {
+    fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true });
+    fs.writeFileSync(path.join(dir, rel), content);
+  };
+  put("src/A.mau", "<p>a</p>");
+  put("src/deep/B.mau", "<p>b</p>");
+  put("src/lib/util.js", "export const x = 1;\n");
+  put("src/style.css", "body { margin: 0; }\n");
+  return { dir, put, has: (rel) => fs.existsSync(path.join(dir, rel)), read: (rel) => fs.readFileSync(path.join(dir, rel), "utf8") };
 }
 
 const run = (cwd, ...args) => spawnSync(process.execPath, [cli, ...args], { cwd, encoding: "utf8" });
@@ -27,61 +32,134 @@ const posixRel = (from, to) => {
   return r.startsWith(".") ? r : "./" + r;
 };
 
-test("every .mau file gets a .js file next to it", () => {
-  const dir = project();
-  const r = run(dir, "src");
+test("src/ is mirrored into dist/: .mau is compiled, everything else is copied", () => {
+  const p = project();
+  const r = run(p.dir);
   assert.equal(r.status, 0, r.stderr);
-  assert.ok(fs.existsSync(path.join(dir, "src", "A.js")));
-  assert.ok(fs.existsSync(path.join(dir, "src", "deep", "B.js")));
+  assert.ok(p.has("dist/A.js") && p.has("dist/deep/B.js"), "compiled");
+  assert.equal(p.read("dist/lib/util.js"), "export const x = 1;\n", "plain js copied");
+  assert.equal(p.read("dist/style.css"), "body { margin: 0; }\n", "css copied");
+  assert.ok(!p.has("dist/A.mau"), "no .mau in dist");
+  assert.match(r.stdout, /2 compiled, 2 copied, 0 removed/);
 });
 
-test("default runtime path points at the mau folder this compiler lives in", () => {
-  const dir = project();
-  run(dir, "src");
-  assert.equal(importPath(path.join(dir, "src", "A.js")), posixRel(path.join(dir, "src"), runtimeEntry));
-  assert.equal(importPath(path.join(dir, "src", "deep", "B.js")), posixRel(path.join(dir, "src", "deep"), runtimeEntry));
+test("src/ is never written to", () => {
+  const p = project();
+  run(p.dir);
+  assert.ok(!p.has("src/A.js") && !p.has("src/deep/B.js"), "no generated file next to the source");
+});
+
+test("the project can be given as an argument", () => {
+  const p = project();
+  const r = run(os.tmpdir(), p.dir);
+  assert.equal(r.status, 0, r.stderr);
+  assert.ok(p.has("dist/A.js"));
+});
+
+test("a second run changes nothing", () => {
+  const p = project();
+  run(p.dir);
+  const r = run(p.dir);
+  assert.match(r.stdout, /0 compiled, 0 copied, 0 removed/);
+});
+
+test("default runtime path points at the mau folder this compiler lives in, measured from dist/", () => {
+  const p = project();
+  run(p.dir);
+  assert.equal(importPath(path.join(p.dir, "dist", "A.js")), posixRel(path.join(p.dir, "dist"), runtimeEntry));
+  assert.equal(importPath(path.join(p.dir, "dist", "deep", "B.js")), posixRel(path.join(p.dir, "dist", "deep"), runtimeEntry));
 });
 
 test("--runtime ./file: the import path is worked out per file", () => {
-  const dir = project();
-  const r = run(dir, "src", "--runtime", "./vendor/mau/index.js");
+  const p = project();
+  const r = run(p.dir, "--runtime", "./vendor/mau/index.js");
   assert.equal(r.status, 0, r.stderr);
-  assert.equal(importPath(path.join(dir, "src", "A.js")), "../vendor/mau/index.js");
-  assert.equal(importPath(path.join(dir, "src", "deep", "B.js")), "../../vendor/mau/index.js");
+  assert.equal(importPath(path.join(p.dir, "dist", "A.js")), "../vendor/mau/index.js");
+  assert.equal(importPath(path.join(p.dir, "dist", "deep", "B.js")), "../../vendor/mau/index.js");
 });
 
 test("--runtime with a root path or a url is written as it is", () => {
-  const dir = project();
-  run(dir, "src", "--runtime", "/vendor/mau/index.js");
-  assert.equal(importPath(path.join(dir, "src", "A.js")), "/vendor/mau/index.js");
-  assert.equal(importPath(path.join(dir, "src", "deep", "B.js")), "/vendor/mau/index.js");
-  run(dir, "src", "--runtime", "https://cdn.example/mau/index.js");
-  assert.equal(importPath(path.join(dir, "src", "A.js")), "https://cdn.example/mau/index.js");
+  const p = project();
+  run(p.dir, "--runtime", "/vendor/mau/index.js");
+  assert.equal(importPath(path.join(p.dir, "dist", "A.js")), "/vendor/mau/index.js");
+  run(p.dir, "--runtime", "https://cdn.example/mau/index.js");
+  assert.equal(importPath(path.join(p.dir, "dist", "deep", "B.js")), "https://cdn.example/mau/index.js");
+});
+
+test("relative imports out of src/ work from dist/ too, because both sit next to each other", () => {
+  const p = project();
+  p.put("src/main.js", 'import { mount } from "../mau/index.js";\n');
+  run(p.dir);
+  assert.equal(p.read("dist/main.js"), 'import { mount } from "../mau/index.js";\n');
 });
 
 test("one broken file: message with file:line:col, exit code 1, the others are still built", () => {
-  const dir = project();
-  fs.writeFileSync(path.join(dir, "src", "Bad.mau"), "<div>\n  <p>\n</div>");
-  const r = run(dir, "src");
+  const p = project();
+  p.put("src/Bad.mau", "<div>\n  <p>\n</div>");
+  const r = run(p.dir);
   assert.equal(r.status, 1);
   assert.match(r.stderr, /Bad\.mau:3:1: expected <\/p>/);
-  assert.ok(fs.existsSync(path.join(dir, "src", "A.js")));
-  assert.ok(!fs.existsSync(path.join(dir, "src", "Bad.js")));
+  assert.ok(p.has("dist/A.js"));
+  assert.ok(!p.has("dist/Bad.js"));
+  assert.match(r.stdout, /with errors/);
 });
 
-test("single files work, and node_modules is skipped", () => {
-  const dir = project();
-  fs.mkdirSync(path.join(dir, "src", "node_modules"));
-  fs.writeFileSync(path.join(dir, "src", "node_modules", "X.mau"), "<p>x</p>");
-  run(dir, path.join("src", "A.mau"));
-  assert.ok(fs.existsSync(path.join(dir, "src", "A.js")));
-  assert.ok(!fs.existsSync(path.join(dir, "src", "deep", "B.js")));
-  run(dir, "src");
-  assert.ok(!fs.existsSync(path.join(dir, "src", "node_modules", "X.js")));
+test("a broken file does not remove the last good output", () => {
+  const p = project();
+  run(p.dir);
+  p.put("src/A.mau", "<div>\n  <p>\n</div>");
+  const r = run(p.dir);
+  assert.equal(r.status, 1);
+  assert.ok(p.has("dist/A.js"), "the old A.js is still there");
 });
 
-test("no arguments: usage message and exit code 2", () => {
-  const r = run(os.tmpdir());
+test("files removed from src/ are removed from dist/, empty folders too", () => {
+  const p = project();
+  run(p.dir);
+  fs.rmSync(path.join(p.dir, "src", "deep"), { recursive: true });
+  fs.rmSync(path.join(p.dir, "src", "style.css"));
+  const r = run(p.dir);
+  assert.ok(!p.has("dist/deep") && !p.has("dist/style.css"));
+  assert.ok(p.has("dist/A.js"));
+  assert.match(r.stdout, /removed .*B\.js/);
+});
+
+test("dist/ with files mau did not write is left alone", () => {
+  const p = project();
+  p.put("dist/mine.txt", "keep me");
+  const r = run(p.dir);
   assert.equal(r.status, 2);
-  assert.match(r.stderr, /usage/);
+  assert.match(r.stderr, /mau did not write/);
+  assert.equal(p.read("dist/mine.txt"), "keep me");
+  assert.ok(!p.has("dist/A.js"));
+});
+
+test("Foo.mau and Foo.js in src/ would collide: error", () => {
+  const p = project();
+  p.put("src/Foo.mau", "<p>x</p>");
+  p.put("src/Foo.js", "export {};\n");
+  const r = run(p.dir);
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /would both become/);
+});
+
+test("dot files and node_modules in src/ are skipped", () => {
+  const p = project();
+  p.put("src/.hidden.js", "x");
+  p.put("src/node_modules/x/index.js", "x");
+  run(p.dir);
+  assert.ok(!p.has("dist/.hidden.js") && !p.has("dist/node_modules"));
+});
+
+test("no src/ folder: message and exit code 2", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mau-cli-"));
+  const r = run(dir);
+  assert.equal(r.status, 2);
+  assert.match(r.stderr, /no src\/ folder/);
+});
+
+test("too many arguments or an unknown option: usage and exit code 2", () => {
+  const p = project();
+  assert.equal(run(p.dir, "a", "b").status, 2);
+  assert.match(run(p.dir, "--nope").stderr, /usage/);
 });

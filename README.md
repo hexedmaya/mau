@@ -14,21 +14,38 @@
 
 ## Use it
 
-Copy this folder into your project, then:
+Copy this folder into your project. A project has two folders next to `mau/`:
 
 ```
-node mau/compiler/cli.js src            # every .mau file gets a .js file next to it
-node mau/compiler/cli.js src --watch
+my-app/
+  index.html
+  src/     what people write: .mau files, plain .js, css, images
+  dist/    what the browser loads. Generated, commit it
+  mau/     this folder
 ```
+
+Compile from the project folder:
+
+```
+node mau/compiler/cli.js            # src/ -> dist/
+node mau/compiler/cli.js --watch
+```
+
+Every `.mau` file in `src/` becomes a `.js` file at the same place in `dist/`. Every other file is copied as it is. `dist/` mirrors `src/` and sits next to it, so a relative import like `../mau/index.js` is the same in both. `src/` is never written to, and `dist/` belongs to mau: what is in there is overwritten or removed (mau refuses to touch a `dist/` it did not create).
 
 ```js
-import { mount } from "./mau/index.js";
-import Counter from "./src/Counter.js";
+// src/main.js
+import { mount } from "../mau/index.js";
+import Counter from "./Counter.js";
 
 mount(document.getElementById("app"), Counter);
 ```
 
-Any static server works. Commit the generated `.js` files, then nobody else needs a build step.
+```html
+<script type="module" src="/dist/main.js"></script>
+```
+
+Any static server works, and for an app with paths like `/instance/3` it has to answer unknown paths with `index.html`. Commit `dist/`, then nobody else needs a build step.
 
 ## What is in here
 
@@ -38,7 +55,7 @@ Any static server works. Commit the generated `.js` files, then nobody else need
 | `compiler/` | the compiler and its command line |
 | `SYNTAX.md` | the `.mau` syntax |
 | `brand/` | logo, icon and PNG variants, see `BRAND-POLICY.md` |
-| `examples/` | a small example |
+| `examples/` | a small project (`src/` and the generated `dist/`) |
 | `test/` | Node tests (`npm install`, then `npm test`) and a browser test page |
 
 ## Related
